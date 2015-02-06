@@ -1,0 +1,256 @@
+<?php
+
+module_load_include('inc', 'node', 'node.pages');
+
+function tnaba_statistics_form_alter(&$form, &$form_state, $form_id){
+
+    //drupal_set_message('<pre>' . print_r($form_state, TRUE) . '</pre>');
+    //drupal_set_message($form_id);
+    
+    // modify all statistics forms
+    if(strstr($form_id, 'stats')){
+    
+        // get node
+        $node = $form_state['node'];
+        // node is new; does not currently exist
+        if ((!isset($node->nid) || isset($node->is_new)) || ($form_id == 'stats_goalball_tournament_node_form'))  {
+            
+            // Create add TSB Student Button
+            if(strstr($form_id, 'student')){
+                // create add student button to statistics forms
+                $form['add_student'] = array(
+                    '#value' => t('Add TSB Student Not In System'),
+                    '#type' => 'submit',
+                    '#submit' => array('tnaba_statistics_add_student_handler'),
+                    '#limit_validation_errors' => array(),
+                    '#weight' => 2,
+                );
+            }
+            else{
+                // create add user button to stat displays on all statistics forms except for goalball tournament.
+                if($form_id != 'stats_goalball_tournament_node_form'){
+                    // create add user button to statistics forms
+                    $form['add_user'] = array(
+                        '#value' => t('Add User Not In System'),
+                        '#type' => 'submit',
+                        '#submit' => array('tnaba_statistics_add_user_handler'),
+                        '#limit_validation_errors' => array(),
+                        '#weight' => 2,
+                    );
+                }
+                // create save add player statistics button to goalball tournament page
+                else{
+                    // create goalball team button
+                    $form['add_team'] = array(
+                        '#value' => t('Add Team Not In System'),
+                        '#type' => 'submit',
+                        '#submit' => array('tnaba_statistics_add_team_handler'),
+                        '#limit_validation_errors' => array(),
+                        '#weight' => 2,
+                    );
+                    $form['stats_goalball'] = array(
+                        '#value' => t('Save and Add Player Statistics'),
+                        '#type' => 'submit',
+                        '#submit' => array('node_form_submit', 'tnaba_statistics_add_player_stats_handler'),
+                        '#weight' => 3,
+                    );
+                    $form['stats_goalball_view'] = array(
+                        '#markup' => views_embed_view('stats_goalball_player', 'default', arg(1)),
+                        '#weight' => 4,
+                    );
+                }
+            } // end create save add player statistics button to goalball tournament page
+
+            // modify save button to save and add another statistic
+            $form['actions']['submit'] = array(
+                '#type' => 'submit',
+                '#value' => t('Save and Add'),
+                '#submit' => array('node_form_submit', 'tnaba_statistics_save_add_redirect_handler'),
+            );
+
+            // create save and exit button for statistics forms
+            $form['actions']['submit_exit'] = array(
+                '#type' => 'submit',
+                '#value' => t('Save and Exit'),
+                '#weight' => 4,
+                '#submit' => array('node_form_submit', 'tnaba_statistics_exit_handler'),
+            );
+
+            // create exit button to close statistics form
+             $form['actions']['exit'] = array(
+                '#value' => t('Exit without Save'),
+                '#type' => 'submit',
+                '#submit' => array('tnaba_statistics_exit_handler'),  
+                '#limit_validation_errors' => array(),
+                '#weight' => 100,
+            );    
+        }// end additional and modified statistics form buttons
+    }
+    // modify create new account to redirect back to stat forms
+    if ($form_id == 'user_register_form') {
+        if((isset($_GET['field_event'])) && (isset($_GET['type']))){
+
+            // modify redirect to return to add statistic
+            $form['#submit'][] = 'tnaba_statistics_user_register_submit';
+
+            // create return to stats entry form without saving
+            if(isset($_GET['field_tournament'])){
+                $form['actions']['submit_exit'] = array(
+                   '#markup' => l(t('Return to Stats without Save'), 'node/add/stats-goalball', array('attributes' => array('class' => 'button'), 'query' => array('field_event' => $_GET['field_event'], 'type' => $_GET['type'], 'field_tournament' => $_GET['field_tournament']))
+                           )
+                    );
+            }
+            else{
+                $form['actions']['submit_exit'] = array(
+                    '#markup' => l(t('Return to Stats without Save'), 'node/add/' . $_GET['type'], array('attributes' => array('class' => 'button'), 'query' => array('field_event' => $_GET['field_event'], 'type' => $_GET['type']))),);
+            }
+        }
+    } // end modify create new account to redirect back to stat forms
+
+    // modify student statistics to save student and return to statistics
+    if($form_id == 'students_node_form'){  
+        if((isset($_GET['field_event'])) && (isset($_GET['type']))){
+
+            // modify redirect to return to add statistic
+            $form['actions']['submit'] = array(
+                '#type' => 'submit',
+                '#value' => t('Save and Return to Stats'),
+                '#submit' => array('node_form_submit', 'tnaba_statistics_student_register_submit'),
+            );
+
+            // create return to stats entry form without saving
+            $form['actions']['submit_exit'] = array(
+                  '#markup' => l(t('Return to Stats without Save'), 'node/add/' . $_GET['type'], array('attributes' => array('class' => 'button'), 'query' => array('field_event' => $_GET['field_event'], 'type' => $_GET['type']))),
+              );
+        }
+    }
+    if($form_id == 'goalball_team_node_form'){  
+        if((isset($_GET['field_event'])) && (isset($_GET['type']))){
+
+            // modify redirect to return to add statistic
+            $form['actions']['submit'] = array(
+                '#type' => 'submit',
+                '#value' => t('Save and Return to Stats'),
+                '#submit' => array('node_form_submit', 'tnaba_statistics_team_register_submit'),
+            );
+
+            // create return to stats entry form without saving
+            $form['actions']['submit_exit'] = array(
+                  '#markup' => l(t('Return to Stats without Save'), 'node/add/' . $_GET['type'], array('attributes' => array('class' => 'button'), 'query' => array('field_event' => $_GET['field_event'], 'type' => $_GET['type']))),
+              );
+        }
+    }
+}
+
+// submit functionality for add student button
+function tnaba_statistics_add_student_handler($form, &$form_state){
+    $form_state['redirect'] = array('node/add/students', 
+        array('query' => 
+            array('field_event' => $_GET['field_event'], 'type' => $_GET['type']))
+        );
+}
+
+// submit functionality for add user button
+function tnaba_statistics_add_user_handler($form, &$form_state){
+    if(isset($_GET['field_tournament'])){
+        if(arg(2) == 'stats-goalball'){
+            $form_state['redirect'] = array('admin/people/create', 
+                array('query' => 
+                    array('field_event' => $_GET['field_event'], 'type' => $_GET['type'], 'field_tournament' => $_GET['field_tournament']))
+                );
+        }
+    }
+    else{
+        $form_state['redirect'] = array('admin/people/create', 
+            array('query' => 
+                array('field_event' => $_GET['field_event'], 'type' => $_GET['type']))
+            );
+    }
+}
+
+// submit functionality for save and add statistics
+function tnaba_statistics_save_add_redirect_handler($form, &$form_state){
+    if(isset($_GET['field_tournament'])){
+        if(arg(2) == 'stats-goalball'){
+            $form_state['redirect'] = array('node/add/stats-goalball', 
+                array('query' => 
+                    array('field_event' => $_GET['field_event'], 'field_tournament' => $_GET['field_tournament'], 'type' => $_GET['type']))
+            );
+        }
+    }
+    else{
+        $form_state['redirect'] = array('node/add/' . $_GET['type'], 
+            array('query' => 
+                array('field_event' => $_GET['field_event'], 'type' => $_GET['type']))
+        );
+    }
+}
+
+// submit functionality for exit button and save and exit button
+function tnaba_statistics_exit_handler($form, &$form_state){
+    if(isset($_GET['field_tournament'])){
+        if(arg(2) == 'stats-goalball'){
+            $form_state['redirect'] = array('node/' . $_GET['field_tournament'] . '/edit', 
+                array('query' => array('field_event' => $_GET['field_event'], 'type' => $_GET['type']))
+                
+            );
+        }
+    }
+    else{
+        $form_state['redirect'] = array('node/' . $_GET['field_event']);
+    }
+}
+
+// return to enter statistics after adding user
+function tnaba_statistics_user_register_submit($form, &$form_state){
+    
+    if(isset($_GET['field_tournament'])){
+        if($_GET['type'] == 'stats-goalball-tournament'){
+            $form_state['redirect'] = array('node/add/stats-goalball', 
+                array('query' => 
+                    array('field_event' => $_GET['field_event'], 'field_participant' => $form_state['values']['uid'], 'type' => $_GET['type'], 'field_tournament' => $_GET['field_tournament']))
+                );
+        }
+    }
+    else{
+        $form_state['redirect'] = array('node/add/' . $_GET['type'], 
+            array('query' => 
+                array('field_event' => $_GET['field_event'], 'field_participant' => $form_state['values']['uid'], 'type' => $_GET['type'])
+            )
+        );
+    }
+}
+
+// return to enter statistics after adding user
+function tnaba_statistics_student_register_submit($form, &$form_state){
+    $form_state['redirect'] = array('node/add/' . $_GET['type'], 
+        array('query' => 
+            array('field_event' => $_GET['field_event'], 'field_student' => $form_state['values']['nid'], 'type' => $_GET['type'])
+        )
+    );
+}
+
+function tnaba_statistics_add_player_stats_handler($form, &$form_state){
+    $form_state['redirect'] = array('node/add/stats-goalball',
+        array('query' => 
+            array('field_event' => $_GET['field_event'], 'field_tournament' => $form_state['values']['nid'], 'type' => $_GET['type'])
+            )
+        );
+}
+
+// submit functionality for add team button
+function tnaba_statistics_add_team_handler($form, &$form_state){
+    $form_state['redirect'] = array('node/add/goalball-team', 
+        array('query' => 
+            array('field_event' => $_GET['field_event'], 'type' => $_GET['type']))
+        );
+}
+
+// return to enter statistics after adding team
+function tnaba_statistics_team_register_submit($form, &$form_state){
+    $form_state['redirect'] = array('node/add/' . $_GET['type'], 
+        array('query' => 
+            array('field_event' => $_GET['field_event'], 'field_team_name' => $form_state['values']['nid'], 'type' => $_GET['type'])
+        )
+    );
+}

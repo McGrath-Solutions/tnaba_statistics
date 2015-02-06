@@ -1,0 +1,3 @@
+name = TNABA Statistics
+description = Helper module to make statistics run smoothly.
+core = 7.x
